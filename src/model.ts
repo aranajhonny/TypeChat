@@ -1,5 +1,6 @@
-import axios from "axios";
+// import axios from "axios";
 import { Result, success, error } from "./result";
+import fetch from 'cross-fetch';
 
 /**
  * Represents a AI language model that can complete prompts. TypeChat uses an implementation of this
@@ -74,8 +75,8 @@ export function createOpenAILanguageModel(apiKey: string, model: string, endPoin
 /**
  * Creates a language model encapsulation of an Azure OpenAI REST API endpoint.
  * @param endPoint The URL of the OpenAI REST API endpoint. The URL must be in the format
- *   "https://{your-resource-name}.openai.azure.com/openai/deployments/{your-deployment-name}/chat/completions?api-version={API-version}".
- *   Example deployment names are "gpt-35-turbo" and "gpt-4". An example API versions is "2023-05-15".
+ * "https://{your-resource-name}.openai.azure.com/openai/deployments/{your-deployment-name}/chat/completions?api-version={API-version}".
+ * Example deployment names are "gpt-35-turbo" and "gpt-4". An example API versions is "2023-05-15".
  * @param apiKey The Azure OpenAI API key.
  * @returns An instance of `TypeChatLanguageModel`.
  */
@@ -86,8 +87,11 @@ export function createAzureOpenAILanguageModel(apiKey: string, endPoint: string,
 /**
  * Common implementation of language model encapsulation of an OpenAI REST API endpoint.
  */
-function createAxiosLanguageModel(url: string, config: object, defaultParams: Record<string, string>) {
-    const client = axios.create(config);
+function createAxiosLanguageModel(
+    url: string,
+    config: any,
+    defaultParams: Record<string, string>
+) {
     const model: TypeChatLanguageModel = {
         complete
     };
@@ -104,12 +108,26 @@ function createAxiosLanguageModel(url: string, config: object, defaultParams: Re
                 temperature: 0,
                 n: 1
             };
-            const result = await client.post(url, params, { validateStatus: status => true });
-            if (result.status === 200) {
-                return success(result.data.choices[0].message?.content ?? "");
+            const response = await fetch(url, {
+                ...config,
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...config.headers,
+                },
+                body: JSON.stringify(params),
+            });
+            if (response.ok) {
+                const result = await response.json();
+                return success(result.choices[0].message?.content ?? "");
             }
-            if (!isTransientHttpError(result.status) || retryCount >= retryMaxAttempts) {
-                return error(`REST API error ${result.status}: ${result.statusText}`);
+            if (
+                !isTransientHttpError(response.status) ||
+                retryCount >= retryMaxAttempts
+            ) {
+                return error(
+                    `REST API error ${response.status}: ${response.statusText}`
+                );
             }
             await sleep(retryPauseMs);
             retryCount++;
